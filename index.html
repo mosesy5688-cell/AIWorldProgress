@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI World Progress - Trusted AI News</title>
+  <meta name="description" content="Latest AI breakthroughs from trusted sources. Updated every 12 hours. CC0 data." />
+  <meta property="og:title" content="AI World Progress" />
+  <meta property="og:description" content="Trusted AI news, zero tracking, open data." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://[YOUR_DOMAIN]" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src 'self' https://api.[YOUR_DOMAIN]; style-src 'self' 'unsafe-inline'; img-src * data:;">
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" href="/favicon.ico" />
+  <style>
+    :root { --blue: #2563eb; --gray: #6b7280; }
+    body { font-family: system-ui, sans-serif; margin: 0; background: #f9fafb; line-height: 1.6; }
+    header { background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); position: sticky; top: 0; z-index: 10; }
+    nav { max-width: 1200px; margin: auto; padding: 1rem; display: flex; gap: 1.5rem; align-items: center; flex-wrap: wrap; }
+    .logo { font-weight: 800; font-size: 1.5rem; color: var(--blue); text-decoration: none; }
+    a { color: #374151; text-decoration: none; font-weight: 500; }
+    a:hover { color: var(--blue); }
+    main { max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
+    .article { border: 1px solid #e5e7eb; border-radius: 12px; padding: 1.25rem; margin-bottom: 1.25rem; background: white; }
+    .title a { color: var(--blue); font-weight: 600; font-size: 1.25rem; }
+    .summary { color: #4b5563; margin: 0.5rem 0; }
+    .meta { font-size: 0.875rem; color: var(--gray); display: flex; gap: 1rem; flex-wrap: wrap; }
+    .tag { background: #eff6ff; color: #1d4ed8; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; }
+    footer { text-align: center; padding: 2rem; color: var(--gray); font-size: 0.875rem; border-top: 1px solid #e5e7eb; margin-top: 3rem; }
+    .loading { text-align: center; padding: 2rem; color: var(--gray); }
+  </style>
+</head>
+<body>
+  <header>
+    <nav>
+      <a href="/" class="logo">AIWP</a>
+      <a href="/projects.html">Projects</a>
+      <a href="/reports.html">Reports</a>
+      <a href="/feedback.html">Feedback</a>
+      <a href="/suggest.html">Suggest</a>
+      <a href="/about.html">About</a>
+    </nav>
+  </header>
+
+  <main>
+    <h1>AI World Progress</h1>
+    <p>Latest AI breakthroughs from trusted sources. Updated every 12 hours.</p>
+    <div id="articles" class="loading">Loading latest news...</div>
+  </main>
+
+  <footer>
+    All data released under <strong>CC0</strong> | <a href="https://x.com/AIWorldProgress" target="_blank">@AIWorldProgress</a>
+  </footer>
+
+  <script>
+    // 动态构建 API 域名
+    const API_BASE = `https://api.${location.hostname}`;
+    
+    async function loadArticles() {
+      try {
+        const res = await fetch(`${API_BASE}/articles`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const articles = await res.json();
+        const container = document.getElementById('articles');
+        if (!articles.length) {
+          container.innerHTML = '<p class="loading">No articles yet. System initializing...</p>';
+          return;
+        }
+        container.innerHTML = articles.map(a => `
+          <div class="article">
+            <div class="title"><a href="${a.url}" target="_blank">${a.title}</a></div>
+            <div class="summary">${a.summary}</div>
+            <div class="meta">
+              <span>${a.source_name}</span>
+              <span>${new Date(a.published_at).toLocaleDateString()}</span>
+              <span class="tag">Trust: ${a.trust_score}%</span>
+            </div>
+          </div>
+        `).join('');
+      } catch (e) {
+        document.getElementById('articles').innerHTML = `<p class="loading">Error: ${e.message}</p>`;
+      }
+    }
+    loadArticles();
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js');
+    }
+  </script>
+</body>
+</html>
