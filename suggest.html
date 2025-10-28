@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Suggest a Source - AI World Progress</title>
+  <meta name="description" content="Suggest new AI news sources or blogs to include in our tracker." />
+  <meta property="og:title" content="Suggest a Source - AIWP" />
+  <meta property="og:description" content="Help expand our trusted AI news network." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://[YOUR_DOMAIN]/suggest.html" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src 'self' https://api.[YOUR_DOMAIN]; style-src 'self' 'unsafe-inline'; img-src * data:;">
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" href="/favicon.ico" />
+  <style>
+    :root { --blue: #2563eb; --gray: #6b7280; }
+    body { font-family: system-ui, sans-serif; margin: 0; background: #f9fafb; line-height: 1.6; }
+    header { background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); position: sticky; top: 0; z-index: 10; }
+    nav { max-width: 1200px; margin: auto; padding: 1rem; display: flex; gap: 1.5rem; align-items: center; flex-wrap: wrap; }
+    .logo { font-weight: 800; font-size: 1.5rem; color: var(--blue); text-decoration: none; }
+    a { color: #374151; text-decoration: none; font-weight: 500; }
+    a:hover { color: var(--blue); }
+    main { max-width: 600px; margin: 2rem auto; padding: 0 1rem; }
+    form { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    label { display: block; margin-bottom: 0.5rem; font-weight: 600; color: #1f2937; }
+    input, textarea { width: 100%; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 8px; font-size: 1rem; margin-bottom: 1rem; }
+    button { background: var(--blue); color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 8px; font-weight: 600; cursor: pointer; }
+    button:hover { background: #1d4ed8; }
+    .success { color: #166534; background: #f0fdf4; padding: 1rem; border-radius: 8px; margin-top: 1rem; }
+    .error { color: #991b1b; background: #fee2e2; padding: 1rem; border-radius: 8px; margin-top: 1rem; }
+    footer { text-align: center; padding: 2rem; color: var(--gray); font-size: 0.875rem; border-top: 1px solid #e5e7eb; margin-top: 3rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <nav>
+      <a href="/" class="logo">AIWP</a>
+      <a href="/projects.html">Projects</a>
+      <a href="/reports.html">Reports</a>
+      <a href="/feedback.html">Feedback</a>
+      <a href="/suggest.html">Suggest</a>
+      <a href="/about.html">About</a>
+    </nav>
+  </header>
+
+  <main>
+    <h1>Suggest a Source</h1>
+    <p>Found a great AI blog or RSS feed? Share it with us!</p>
+    <form id="suggestForm">
+      <label for="url">RSS/Website URL *</label>
+      <input type="url" id="url" placeholder="https://example.com/rss" required />
+      
+      <label for="note">Optional Note</label>
+      <textarea id="note" rows="3" placeholder="Why should we add this source?"></textarea>
+      
+      <button type="submit">Submit Suggestion</button>
+    </form>
+    <div id="result"></div>
+  </main>
+
+  <footer>
+    All data released under <strong>CC0</strong> | <a href="https://x.com/AIWorldProgress" target="_blank">@AIWorldProgress</a>
+  </footer>
+
+  <script>
+    const API_BASE = `https://api.${location.hostname}`;
+    const form = document.getElementById('suggestForm');
+    const result = document.getElementById('result');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const url = document.getElementById('url').value.trim();
+      const note = document.getElementById('note').value.trim();
+      
+      if (!url.startsWith('http') || !/^https?:\/\/[^\s/$.?#].[^\s]*$/.test(url)) {
+        result.innerHTML = '<div class="error">Please enter a valid URL starting with http:// or https://</div>';
+        return;
+      }
+      
+      try {
+        const res = await fetch(`${API_BASE}/suggest`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url, note })
+        });
+        if (res.ok) {
+          result.innerHTML = '<div class="success">Thank you! We’ll review your suggestion.</div>';
+          form.reset();
+        } else {
+          const err = await res.json();
+          result.innerHTML = `<div class="error">Error: ${err.error || 'Failed to submit'}</div>`;
+        }
+      } catch (e) {
+        result.innerHTML = `<div class="error">Network error: ${e.message}</div>`;
+      }
+    });
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js');
+    }
+  </script>
+</body>
+</html>
