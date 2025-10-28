@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>About - AI World Progress</title>
+  <meta name="description" content="Open, trusted, privacy-first AI intelligence platform. 100% free, CC0, no tracking." />
+  <meta property="og:title" content="About AI World Progress" />
+  <meta property="og:description" content="Global AI progress, zero cost, zero tracking, fully open." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://[YOUR_DOMAIN]/about.html" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src 'self' https://api.[YOUR_DOMAIN]; style-src 'self' 'unsafe-inline'; img-src * data:;">
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" href="/favicon.ico" />
+  <style>
+    :root { --blue: #2563eb; --gray: #6b7280; }
+    body { font-family: system-ui, sans-serif; margin: 0; background: #f9fafb; line-height: 1.6; }
+    header { background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); position: sticky; top: 0; z-index: 10; }
+    nav { max-width: 1200px; margin: auto; padding: 1rem; display: flex; gap: 1.5rem; align-items: center; flex-wrap: wrap; }
+    .logo { font-weight: 800; font-size: 1.5rem; color: var(--blue); text-decoration: none; }
+    a { color: #374151; text-decoration: none; font-weight: 500; }
+    a:hover { color: var(--blue); }
+    main { max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
+    section { background: white; padding: 2rem; border-radius: 12px; margin-bottom: 1.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+    h2 { color: var(--blue); border-bottom: 2px solid #dbeafe; padding-bottom: 0.5rem; }
+    ul { padding-left: 1.5rem; }
+    li { margin-bottom: 0.5rem; }
+    .badge { display: inline-block; background: #eff6ff; color: #1d4ed8; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600; margin-right: 0.5rem; }
+    footer { text-align: center; padding: 2rem; color: var(--gray); font-size: 0.875rem; border-top: 1px solid #e5e7eb; margin-top: 3rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <nav>
+      <a href="/" class="logo">AIWP</a>
+      <a href="/projects.html">Projects</a>
+      <a href="/reports.html">Reports</a>
+      <a href="/feedback.html">Feedback</a>
+      <a href="/suggest.html">Suggest</a>
+      <a href="/about.html">About</a>
+    </nav>
+  </header>
+
+  <main>
+    <section>
+      <h1>About AI World Progress</h1>
+      <p><strong>The world’s first 100% free, open, privacy-first AI intelligence platform.</strong></p>
+      <p>We aggregate trusted AI news, track major projects, and generate weekly reports — all without tracking, ads, or paywalls.</p>
+    </section>
+
+    <section>
+      <h2>Core Principles</h2>
+      <ul>
+        <li><span class="badge">Zero Tracking</span> No IP, cookies, or analytics.</li>
+        <li><span class="badge">Zero Cost</span> Runs on GitHub Pages + Cloudflare free tier.</li>
+        <li><span class="badge">CC0 Data</span> All content is public domain.</li>
+        <li><span class="badge">365-Day Uptime</span> Fully automated, no maintenance.</li>
+        <li><span class="badge">Open Source</span> Code available on GitHub.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>How It Works</h2>
+      <p>Every 12 hours, our system:</p>
+      <ol>
+        <li>Fetches RSS feeds from trusted sources</li>
+        <li>Uses AI to generate concise summaries</li>
+        <li>Stores data in Cloudflare D1</li>
+        <li>Generates weekly Markdown reports</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Contribute</h2>
+      <p><a href="/suggest.html">Suggest a new source</a> · <a href="/feedback.html">Send feedback</a> · <a href="https://github.com/your-username/your-username.github.io" target="_blank">Fork on GitHub</a></p>
+    </section>
+  </main>
+
+  <footer>
+    All data released under <strong>CC0</strong> | <a href="https://x.com/AIWorldProgress" target="_blank">@AIWorldProgress</a>
+  </footer>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js');
+    }
+  </script>
+</body>
+</html>
