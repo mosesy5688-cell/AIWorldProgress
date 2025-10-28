@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Weekly AI Reports - AI World Progress</title>
+  <meta name="description" content="Weekly AI progress reports in Markdown. Fully open and CC0." />
+  <meta property="og:title" content="Weekly AI Reports - AIWP" />
+  <meta property="og:description" content="Automated weekly summaries of AI breakthroughs." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://[YOUR_DOMAIN]/reports.html" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src 'self' https://api.[YOUR_DOMAIN]; style-src 'self' 'unsafe-inline'; img-src * data:;">
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" href="/favicon.ico" />
+  <style>
+    :root { --blue: #2563eb; --gray: #6b7280; }
+    body { font-family: system-ui, sans-serif; margin: 0; background: #f9fafb; line-height: 1.6; }
+    header { background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); position: sticky; top: 0; z-index: 10; }
+    nav { max-width: 1200px; margin: auto; padding: 1rem; display: flex; gap: 1.5rem; align-items: center; flex-wrap: wrap; }
+    .logo { font-weight: 800; font-size: 1.5rem; color: var(--blue); text-decoration: none; }
+    a { color: #374151; text-decoration: none; font-weight: 500; }
+    a:hover { color: var(--blue); }
+    main { max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
+    pre { background: white; border: 1px solid #e5e7eb; border-radius: 12px; padding: 1.5rem; overflow-x: auto; font-size: 0.95rem; }
+    .loading { text-align: center; padding: 2rem; color: var(--gray); }
+    footer { text-align: center; padding: 2rem; color: var(--gray); font-size: 0.875rem; border-top: 1px solid #e5e7eb; margin-top: 3rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <nav>
+      <a href="/" class="logo">AIWP</a>
+      <a href="/projects.html">Projects</a>
+      <a href="/reports.html">Reports</a>
+      <a href="/feedback.html">Feedback</a>
+      <a href="/suggest.html">Suggest</a>
+      <a href="/about.html">About</a>
+    </nav>
+  </header>
+
+  <main>
+    <h1>Weekly AI Reports</h1>
+    <p>Automated weekly summaries of major AI developments. CC0 licensed.</p>
+    <pre id="reports" class="loading">Loading reports...</pre>
+  </main>
+
+  <footer>
+    All data released under <strong>CC0</strong> | <a href="https://x.com/AIWorldProgress" target="_blank">@AIWorldProgress</a>
+  </footer>
+
+  <script>
+    const API_BASE = `https://api.${location.hostname}`;
+
+    async function loadReports() {
+      try {
+        const res = await fetch(`${API_BASE}/reports`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const text = await res.text();
+        document.getElementById('reports').textContent = text || 'No reports available yet.';
+      } catch (e) {
+        document.getElementById('reports').textContent = `Error loading reports: ${e.message}`;
+      }
+    }
+    loadReports();
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js');
+    }
+  </script>
+</body>
+</html>
