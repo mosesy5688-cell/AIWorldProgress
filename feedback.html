@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Feedback - AI World Progress</title>
+  <meta name="description" content="Share your thoughts, report issues, or suggest improvements." />
+  <meta property="og:title" content="Feedback - AIWP" />
+  <meta property="og:description" content="Help us improve AI World Progress." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://[YOUR_DOMAIN]/feedback.html" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src 'self' https://api.[YOUR_DOMAIN]; style-src 'self' 'unsafe-inline'; img-src * data:;">
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" href="/favicon.ico" />
+  <style>
+    :root { --blue: #2563eb; --gray: #6b7280; }
+    body { font-family: system-ui, sans-serif; margin: 0; background: #f9fafb; line-height: 1.6; }
+    header { background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); position: sticky; top: 0; z-index: 10; }
+    nav { max-width: 1200px; margin: auto; padding: 1rem; display: flex; gap: 1.5rem; align-items: center; flex-wrap: wrap; }
+    .logo { font-weight: 800; font-size: 1.5rem; color: var(--blue); text-decoration: none; }
+    a { color: #374151; text-decoration: none; font-weight: 500; }
+    a:hover { color: var(--blue); }
+    main { max-width: 600px; margin: 2rem auto; padding: 0 1rem; }
+    form { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    label { display: block; margin-bottom: 0.5rem; font-weight: 600; color: #1f2937; }
+    textarea { width: 100%; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 8px; font-size: 1rem; resize: vertical; }
+    button { margin-top: 1rem; background: var(--blue); color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 8px; font-weight: 600; cursor: pointer; }
+    button:hover { background: #1d4ed8; }
+    .success { color: #166534; background: #f0fdf4; padding: 1rem; border-radius: 8px; margin-top: 1rem; }
+    .error { color: #991b1b; background: #fee2e2; padding: 1rem; border-radius: 8px; margin-top: 1rem; }
+    footer { text-align: center; padding: 2rem; color: var(--gray); font-size: 0.875rem; border-top: 1px solid #e5e7eb; margin-top: 3rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <nav>
+      <a href="/" class="logo">AIWP</a>
+      <a href="/projects.html">Projects</a>
+      <a href="/reports.html">Reports</a>
+      <a href="/feedback.html">Feedback</a>
+      <a href="/suggest.html">Suggest</a>
+      <a href="/about.html">About</a>
+    </nav>
+  </header>
+
+  <main>
+    <h1>Feedback</h1>
+    <p>We’d love to hear your thoughts. All feedback is anonymous and stored securely.</p>
+    <form id="feedbackForm">
+      <label for="message">Your Message</label>
+      <textarea id="message" rows="5" maxlength="1000" placeholder="Report a bug, suggest a feature, or share your thoughts..." required></textarea>
+      <button type="submit">Send Feedback</button>
+    </form>
+    <div id="result"></div>
+  </main>
+
+  <footer>
+    All data released under <strong>CC0</strong> | <a href="https://x.com/AIWorldProgress" target="_blank">@AIWorldProgress</a>
+  </footer>
+
+  <script>
+    const API_BASE = `https://api.${location.hostname}`;
+    const form = document.getElementById('feedbackForm');
+    const result = document.getElementById('result');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const message = document.getElementById('message').value.trim();
+      if (!message || message.length < 5) {
+        result.innerHTML = '<div class="error">Message must be at least 5 characters.</div>';
+        return;
+      }
+      try {
+        const res = await fetch(`${API_BASE}/feedback`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message })
+        });
+        if (res.ok) {
+          result.innerHTML = '<div class="success">Thank you! Your feedback has been received.</div>';
+          form.reset();
+        } else {
+          const err = await res.json();
+          result.innerHTML = `<div class="error">Error: ${err.error || 'Failed to send'}</div>`;
+        }
+      } catch (e) {
+        result.innerHTML = `<div class="error">Network error: ${e.message}</div>`;
+      }
+    });
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js');
+    }
+  </script>
+</body>
+</html>
