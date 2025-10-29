@@ -38,7 +38,8 @@
     .stat-card { background: white; padding: 1.5rem; border-radius: 12px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
     .stat-value { font-size: 2rem; font-weight: 800; color: var(--blue); }
     .stat-label { color: var(--gray); font-size: 0.875rem; }
-    .error { color: var(--red); font-size: 0.875rem; }
+    .error { color: var(--red); font-size: 0.875rem; margin-top: 0.5rem; }
+    .debug { background: #f3f4f6; padding: 0.5rem; font-family: monospace; font-size: 0.8rem; margin-top: 1rem; }
   </style>
 </head>
 <body>
@@ -65,6 +66,7 @@
       </div>
       <button id="login-btn" class="btn btn-primary">Login</button>
       <p id="login-msg" class="error"></p>
+      <div id="debug-log" class="debug" style="display:none;"></div>
     </div>
 
     <!-- Stats -->
@@ -108,7 +110,17 @@
     const API_BASE = 'https://api.aiworldprogress.com/admin';
     let authToken = localStorage.getItem('admin_token');
     let refreshInterval;
-    let cachedSources = []; // ← 缓存可信源
+    let cachedSources = [];
+
+    // === Debug Log ===
+    function log(msg) {
+      console.log(msg);
+      const el = document.getElementById('debug-log');
+      if (el) {
+        el.style.display = 'block';
+        el.innerHTML += msg + '<br>';
+      }
+    }
 
     // === XSS Protection ===
     function escapeHtml(text) {
@@ -118,10 +130,16 @@
       return div.innerHTML;
     }
 
-    // === Login ===
+    // === Login (100% Reliable) ===
     document.getElementById('login-btn').addEventListener('click', async () => {
       const key = document.getElementById('admin-key').value.trim();
-      if (!key) return;
+      if (!key) {
+        document.getElementById('login-msg').textContent = 'Enter ADMIN_KEY';
+        return;
+      }
+
+      log('Attempting login...');
+      document.getElementById('login-btn').disabled = true;
 
       try {
         const res = await fetch(`${API_BASE}/login`, {
@@ -131,64 +149,77 @@
         });
 
         const data = await res.json();
+        log(`Login response: ${res.status} ${JSON.stringify(data)}`);
 
         if (res.ok && data.token) {
           authToken = data.token;
           localStorage.setItem('admin_token', authToken);
           document.getElementById('auth-status').textContent = 'Logged In';
           document.getElementById('login-section').style.display = 'none';
-          loadAll();
+          log('Login successful, loading data...');
+          await loadAll();  // 必须 await
           startAutoRefresh();
         } else {
           document.getElementById('login-msg').textContent = data.error || 'Invalid Key';
         }
       } catch (e) {
-        console.error(e);
-        document.getElementById('login-msg').textContent = 'Network error';
+        log('Login network error: ' + e.message);
+        document.getElementById('login-msg').textContent = 'Network error: Check API domain';
+      } finally {
+        document.getElementById('login-btn').disabled = false;
       }
     });
 
-    // === Auto Refresh (只刷新实时模块) ===
+    // === Auto Refresh ===
     function startAutoRefresh() {
       if (refreshInterval) clearInterval(refreshInterval);
       refreshInterval = setInterval(() => {
         loadStats();
         loadFeedback();
         loadSuggest();
-        // 可信源不自动刷新，防止覆盖
       }, 5000);
     }
 
-    // === Load All Data ===
+    // === Load All Data (分步加载，防崩溃) ===
     async function loadAll() {
+      log('loadAll() started');
+
+      // 1. Stats
       try {
-        const [stats, feedback, suggest, sources] = await Promise.all([
-          safeFetch(`${API_BASE}/stats`),
-          safeFetch(`${API_BASE}/feedback`),
-          safeFetch(`${API_BASE}/suggest`),
-          safeFetch(`${API_BASE}/sources`)
-        ]);
+        const stats = await safeFetch(`${API_BASE}/stats`);
+        if (stats) {
+          document.getElementById('feedback-count').textContent = stats.feedback || 0;
+          document.getElementById('suggest-count').textContent = stats.suggest || 0;
+          document.getElementById('source-count').textContent = stats.sources || 0;
+        }
+      } catch (e) { log('Stats failed: ' + e); }
 
-        // 更新统计
-        document.getElementById('feedback-count').textContent = stats?.feedback || 0;
-        document.getElementById('suggest-count').textContent = stats?.suggest || 0;
-        document.getElementById('source-count').textContent = stats?.sources || 0;
+      // 2. Feedback
+      try {
+        const feedback = await safeFetch(`${API_BASE}/feedback`) || [];
+        loadFeedback(feedback);
+      } catch (e) { log('Feedback failed: ' + e); }
 
-        // 显示模块
-        document.getElementById('stats-section').style.display = 'grid';
-        document.getElementById('feedback-section').style.display = 'block';
-        document.getElementById('suggest-section').style.display = 'block';
-        document.getElementById('sources-section').style.display = 'block';
+      // 3. Suggest
+      try {
+        const suggest = await safeFetch(`${API_BASE}/suggest`) || [];
+        loadSuggest(suggest);
+      } catch (e) { log('Suggest failed: ' + e); }
 
-        // 渲染
-        loadFeedback(feedback || []);
-        loadSuggest(suggest || []);
-        cachedSources = sources || [];
-        loadSources(cachedSources);
+      // 4. Sources
+      try {
+        const sources = await safeFetch(`${API_BASE}/sources`) || [];
+        cachedSources = sources;
+        loadSources(sources);
+      } catch (e) { log('Sources failed: ' + e); }
 
-      } catch (e) {
-        console.error('loadAll error:', e);
-      }
+      // 显示所有模块
+      document.getElementById('stats-section').style.display = 'grid';
+      document.getElementById('feedback-section').style.display = 'block';
+      document.getElementById('suggest-section').style.display = 'block';
+      document.getElementById('sources-section').style.display = 'block';
+
+      log('All modules loaded');
     }
 
     // === Safe Fetch ===
@@ -202,25 +233,19 @@
           },
           body: body ? JSON.stringify(body) : null
         });
-        if (res.status === 401) { logout(); return null; }
+        if (res.status === 401) {
+          log('401 Unauthorized → Logging out');
+          logout();
+          return null;
+        }
         return res.ok ? await res.json() : null;
       } catch (e) {
-        console.error('safeFetch error:', e);
+        log(`Fetch failed [${url}]: ${e.message}`);
         return null;
       }
     }
 
-    // === Stats ===
-    async function loadStats() {
-      const data = await safeFetch(`${API_BASE}/stats`);
-      if (data) {
-        document.getElementById('feedback-count').textContent = data.feedback || 0;
-        document.getElementById('suggest-count').textContent = data.suggest || 0;
-        document.getElementById('source-count').textContent = data.sources || 0;
-      }
-    }
-
-    // === Feedback ===
+    // === Render Functions ===
     function loadFeedback(items) {
       const data = Array.isArray(items) ? items : [];
       const html = data.length ? `
@@ -228,12 +253,11 @@
           <tr><th>Time</th><th>Message</th></tr>
           ${data.map(i => `<tr><td>${new Date(i.created_at).toLocaleString()}</td><td>${escapeHtml(i.message)}</td></tr>`).join('')}
         </table>
-      ` : '< a<p>No feedback yet</p>';
+      ` : '<p>No feedback yet</p>';
       const el = document.getElementById('feedback-list');
       if (el) el.innerHTML = html;
     }
 
-    // === Suggested Sources ===
     function loadSuggest(items) {
       const data = Array.isArray(items) ? items : [];
       const html = data.length ? `
@@ -256,7 +280,6 @@
       if (el) el.innerHTML = html;
     }
 
-    // === Trusted Sources (使用缓存) ===
     function loadSources(items) {
       const data = Array.isArray(items) ? items : cachedSources;
       const html = data.length ? `
@@ -277,3 +300,8 @@
       const el = document.getElementById('sources-list');
       if (el) el.innerHTML = html;
     }
+
+    // === Actions ===
+    window.approveSuggest = async (id) => {
+      if (!confirm('Approve?')) return;
+      const url = prompt('RSS URL
