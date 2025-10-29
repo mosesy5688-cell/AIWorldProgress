@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AIWP Admin Panel v4.1</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; connect-src 'self' https://api.aiworldprogress.com; style-src 'self' 'unsafe-inline';">
+  <link rel="manifest" href="/manifest.json" />
+  <style>
+    :root { --blue: #2563eb; --green: #16a34a; --red: #dc2626; --gray: #6b7280; }
+    body { font-family: system-ui, sans-serif; margin: 0; background: #f9fafb; line-height: 1.6; }
+    header { background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); position: sticky; top: 0; z-index: 10; }
+    nav { max-width: 1200px; margin: auto; padding: 1rem; display: flex; justify-content: space-between; align-items: center; }
+    .logo { font-weight: 800; font-size: 1.5rem; color: var(--blue); text-decoration: none; }
+    main { max-width: 1000px; margin: 2rem auto; padding: 0 1rem; }
+    .card { background: white; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+    h1, h2 { color: var(--blue); }
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    th, td { padding: 0.75rem; text-align: left; border-bottom: 1px solid #e5e7eb; }
+    th { background: #f3f4f6; font-weight: 600; }
+    .btn { padding: 0.5rem 1rem; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; margin-right: 0.5rem; }
+    .btn-primary { background: var(--blue); color: white; }
+    .btn-success { background: var(--green); color: white; }
+    .btn-danger { background: var(--red); color: white; }
+    .btn:hover { opacity: 0.9; }
+    .input { width: 100%; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 8px; font-size: 1rem; }
+    .form-group { margin-bottom: 1rem; }
+    label { display: block; margin-bottom: 0.5rem; font-weight: 600; }
+    .loading { text-align: center; padding: 2rem; color: var(--gray); }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+    .stat-card { background: white; padding: 1.5rem; border-radius: 12px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+    .stat-value { font-size: 2rem; font-weight: 800; color: var(--blue); }
+    .stat-label { color: var(--gray); font-size: 0.875rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <nav>
+      <a href="/" class="logo">AIWP</a>
+      <div>
+        <a href="/" style="margin-right: 1rem;">Back to Home</a>
+        <span id="auth-status">Not Logged In</span>
+      </div>
+    </nav>
+  </header>
+
+  <main>
+    <h1>AIWP Admin Panel v4.1</h1>
+    <p>Real-time Feedback · Source Audit · Trusted Source Management</p>
+
+    <!-- Login -->
+    <div class="card" id="login-section">
+      <h2>Admin Login</h2>
+      <div class="form-group">
+        <label for="admin-key">Admin Key (ADMIN_KEY)</label>
+        <input type="password" id="admin-key" class="input" placeholder="Enter your ADMIN_KEY" />
+      </div>
+      <button id="login-btn" class="btn btn-primary">Login</button>
+      <p id="login-msg" style="color: red;"></p>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats" id="stats-section" style="display: none;">
+      <div class="stat-card">
+        <div class="stat-value" id="feedback-count">0</div>
+        <div class="stat-label">Total Feedback</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="suggest-count">0</div>
+        <div class="stat-label">Pending Sources</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="source-count">0</div>
+        <div class="stat-label">Trusted Sources</div>
+      </div>
+    </div>
+
+    <!-- Feedback List -->
+    <div class="card" id="feedback-section" style="display: none;">
+      <h2>Real-time Feedback (<span id="feedback-refresh">Refreshes every 5s</span>)</h2>
+      <div id="feedback-list" class="loading">Loading...</div>
+    </div>
+
+    <!-- Suggested Sources -->
+    <div class="card" id="suggest-section" style="display: none;">
+      <h2>Source Audit</h2>
+      <div id="suggest-list" class="loading">Loading...</div>
+    </div>
+
+    <!-- Trusted Sources -->
+    <div class="card" id="sources-section" style="display: none;">
+      <h2>Trusted Source Management</h2>
+      <button id="add-source-btn" class="btn btn-success">+ Add New Source</button>
+      <div id="sources-list" class="loading" style="margin-top: 1rem;">Loading...</div>
+    </div>
+  </main>
+
+  <script>
+    // === Configuration ===
+    const API_BASE = 'https://[YOUR_API_DOMAIN]/admin';
+    let authToken = localStorage.getItem('admin_token');
+    let refreshInterval;
+
+    // === XSS Protection ===
+    function escapeHtml(text) {
+      if (typeof text !== 'string') return text;
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // === Login ===
+    document.getElementById('login-btn').addEventListener('click', async () => {
+      const key = document.getElementById('admin-key').value.trim();
+      if (!key) return;
+      try {
+        const res = await fetch(`${API_BASE}/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key })
+        });
+        const data = await res.json();
+        if (res.ok && data.token) {
+          authToken = data.token;
+          localStorage.setItem('admin_token', authToken);
+          document.getElementById('auth-status').textContent = 'Logged In';
+          document.getElementById('login-section').style.display = 'none';
+          loadAll();
+          startAutoRefresh();
+        } else {
+          document.getElementById('login-msg').textContent = data.error || 'Invalid Key';
+        }
+      } catch (e) {
+        document.getElementById('login-msg').textContent = 'Network Error';
+      }
+    });
+
+    // === Auto Refresh ===
+    function startAutoRefresh() {
+      if (refreshInterval) clearInterval(refreshInterval);
+      refreshInterval = setInterval(() => {
+        loadFeedback();
+        loadSuggest();
+        loadStats();
+      }, 5000);
+    }
+
+    // === Load All Data ===
+    async function loadAll() {
+      await Promise.all([loadStats(), loadFeedback(), loadSuggest(), loadSources()]);
+      document.getElementById('stats-section').style.display = 'grid';
+      document.getElementById('feedback-section').style.display = 'block';
+      document.getElementById('suggest-section').style.display = 'block';
+      document.getElementById('sources-section').style.display = 'block';
+    }
+
+    // === Stats ===
+    async function loadStats() {
+      const res = await fetch(`${API_BASE}/stats`, { headers: { 'Authorization': `Bearer ${authToken}` } });
+      if (res.status === 401) { logout(); return; }
+      const data = await res.json();
+      document.getElementById('feedback-count').textContent = data.feedback || 0;
+      document.getElementById('suggest-count').textContent = data.suggest || 0;
+      document.getElementById('source-count').textContent = data.sources || 0;
+    }
+
+    // === Feedback ===
+    async function loadFeedback() {
+      const res = await fetch(`${API_BASE}/feedback`, { headers: { 'Authorization': `Bearer ${authToken}` } });
+      if (res.status === 401) { logout(); return; }
+      const items = await res.json();
+      const html = items.length ? `
+        <table>
+          <tr><th>Time</th><th>Message</th></tr>
+          ${items.map(i => `<tr><td>${new Date(i.created_at).toLocaleString()}</td><td>${escapeHtml(i.message)}</td></tr>`).join('')}
+        </table>
+      ` : '<p>No feedback yet</p>';
+      document.getElementById('feedback-list').innerHTML = html;
+    }
+
+    // === Suggested Sources ===
+    async function loadSuggest() {
+      const res = await fetch(`${API_BASE}/suggest`, { headers: { 'Authorization': `Bearer ${authToken}` } });
+      if (res.status === 401) { logout(); return; }
+      const items = await res.json();
+      const html = items.length ? `
+        <table>
+          <tr><th>URL</th><th>Note</th><th>Time</th><th>Action</th></tr>
+          ${items.map(i => `
+            <tr>
+              <td><a href="${escapeHtml(i.url)}" target="_blank">${escapeHtml(i.url)}</a></td>
+              <td>${escapeHtml(i.note || '-')}</td>
+              <td>${new Date(i.created_at).toLocaleString()}</td>
+              <td>
+                <button class="btn btn-success" onclick="approveSuggest('${i.id}')">Approve</button>
+                <button class="btn btn-danger" onclick="rejectSuggest('${i.id}')">Reject</button>
+              </td>
+            </tr>
+          `).join('')}
+        </table>
+      ` : '<p>No pending suggestions</p>';
+      document.getElementById('suggest-list').innerHTML = html;
+    }
+
+    // === Trusted Sources ===
+    async function loadSources() {
+      const res = await fetch(`${API_BASE}/sources`, { headers: { 'Authorization': `Bearer ${authToken}` } });
+      if (res.status === 401) { logout(); return; }
+      const items = await res.json();
+      const html = `
+        <table>
+          <tr><th>Name</th><th>RSS URL</th><th>Status</th><th>Action</th></tr>
+          ${items.map(s => `
+            <tr>
+              <td>${escapeHtml(s.name)}</td>
+              <td><a href="${escapeHtml(s.url)}" target="_blank">${escapeHtml(s.url)}</a></td>
+              <td><span class="status ${s.status}">${s.status}</span></td>
+              <td>
+                <button class="btn btn-danger" onclick="deleteSource('${s.id}')">Delete</button>
+              </td>
+            </tr>
+          `).join('')}
+        </table>
+      `;
+      document.getElementById('sources-list').innerHTML = html;
+    }
+
+    // === Action Functions ===
+    window.approveSuggest = async (id) => {
+      if (!confirm('Approve this source?')) return;
+      const url = prompt('RSS URL:');
+      const name = prompt('Source Name:');
+      if (!url || !name) return;
+      await fetch(`${API_BASE}/suggest/${id}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+        body: JSON.stringify({ url, name })
+      });
+      loadSuggest(); loadSources();
+    };
+
+    window.rejectSuggest = async (id) => {
+      if (!confirm('Reject this suggestion?')) return;
+      await fetch(`${API_BASE}/suggest/${id}/reject`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${authToken}` } });
+      loadSuggest();
+    };
+
+    window.deleteSource = async (id) => {
+      if (!confirm('Delete this source?')) return;
+      await fetch(`${API_BASE}/sources/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${authToken}` } });
+      loadSources();
+    };
+
+    document.getElementById('add-source-btn').addEventListener('click', async () => {
+      const name = prompt('Source Name:');
+      const url = prompt('RSS URL:');
+      if (!name || !url) return;
+      await fetch(`${API_BASE}/sources`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+        body: JSON.stringify({ name, url })
+      });
+      loadSources();
+    });
+
+    // === Logout ===
+    function logout() {
+      localStorage.removeItem('admin_token');
+      clearInterval(refreshInterval);
+      location.reload();
+    }
+
+    // === Init ===
+    if (authToken) {
+      document.getElementById('auth-status').textContent = 'Logged In';
+      document.getElementById('login-section').style.display = 'none';
+      loadAll();
+      startAutoRefresh();
+    }
+  </script>
+</body>
+</html>
