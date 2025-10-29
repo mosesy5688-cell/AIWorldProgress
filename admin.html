@@ -23,15 +23,18 @@
         .card { background: white; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
         h1, h2 { color: var(--blue); }
         table { width: 100%; border-collapse: collapse; margin-top: 1rem; table-layout: fixed; }
-        th, td { padding: 0.75rem; text-align: left; border-bottom: 1px solid #e5e7eb; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        th, td { padding: 0.75rem; text-align: left; border-bottom: 1px solid #e5e7eb; overflow: hidden; text-overflow: ellipsis; }
         th { background: #f3f4f6; font-weight: 600; }
-        .btn { padding: 0.5rem 1rem; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; margin-right: 0.5rem; }
+        .td-break { white-space: normal; } /* Allow break for descriptions/messages */
+        .btn { padding: 0.5rem 1rem; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; margin-right: 0.5rem; transition: opacity 0.2s; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
         .btn-primary { background: var(--blue); color: white; }
         .btn-success { background: var(--green); color: white; }
         .btn-danger { background: var(--red); color: white; }
         .btn-warning { background: var(--yellow); color: black; }
-        .btn:hover { opacity: 0.9; }
-        .input { width: 100%; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 8px; font-size: 1rem; }
+        .btn-link { background: none; color: var(--blue); text-decoration: underline; padding: 0; margin-right: 0.5rem; }
+        .btn:not(:disabled):hover { opacity: 0.9; }
+        .input { width: 100%; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 8px; font-size: 1rem; box-sizing: border-box;}
         .form-group { margin-bottom: 1rem; }
         label { display: block; margin-bottom: 0.5rem; font-weight: 600; }
         .loading { text-align: center; padding: 2rem; color: var(--gray); }
@@ -39,8 +42,14 @@
         .stat-card { background: white; padding: 1.5rem; border-radius: 12px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
         .stat-value { font-size: 2rem; font-weight: 800; color: var(--blue); }
         .stat-label { color: var(--gray); font-size: 0.875rem; }
-        .error { color: var(--red); font-size: 0.875rem; margin-top: 0.5rem; }
+        .error-msg { color: var(--red); font-size: 0.875rem; margin-top: 0.5rem; }
         .debug { background: #f3f4f6; padding: 0.75rem; font-family: monospace; font-size: 0.8rem; margin-top: 1rem; border-radius: 8px; overflow-x: auto;}
+        
+        /* Modal Styles */
+        .modal { display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4); }
+        .modal-content { background-color: #fefefe; margin: 10% auto; padding: 20px; border: 1px solid #888; width: 90%; max-width: 500px; border-radius: 12px; }
+        .close-btn { color: #aaa; float: right; font-size: 28px; font-weight: bold; }
+        .close-btn:hover, .close-btn:focus { color: #000; text-decoration: none; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -66,7 +75,7 @@
                 <input type="password" id="admin-key" class="input" placeholder="Enter your ADMIN_KEY" />
             </div>
             <button id="login-btn" class="btn btn-primary">Login</button>
-            <p id="login-msg" class="error"></p>
+            <p id="login-msg" class="error-msg"></p>
             <div id="debug-log" class="debug" style="display:none;"></div>
         </div>
 
@@ -93,6 +102,7 @@
         <div class="card" id="sources-section" style="display: none;">
             <h2>Trusted Source Management</h2>
             <button id="add-source-btn" class="btn btn-success">+ Add New Source</button>
+            <button id="run-scraper-btn" class="btn btn-warning" title="Manually trigger the scraper job (requires token)">Run Scraper Job</button>
             <div id="sources-list" class="loading" style="margin-top: 1rem;">Loading...</div>
         </div>
         
@@ -102,6 +112,30 @@
         </div>
     </main>
 
+    <div id="source-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn">&times;</span>
+            <h2>Add New Source</h2>
+            <form id="add-source-form">
+                <div class="form-group">
+                    <label for="source-name">Name *</label>
+                    <input type="text" id="source-name" class="input" required>
+                </div>
+                <div class="form-group">
+                    <label for="source-url">RSS/Feed URL *</label>
+                    <input type="url" id="source-url" class="input" required>
+                </div>
+                <div class="form-group">
+                    <label for="source-trust">Trust Score (0-100)</label>
+                    <input type="number" id="source-trust" class="input" value="70" min="0" max="100">
+                </div>
+                <button type="submit" id="modal-submit-btn" class="btn btn-primary">Add Source</button>
+            </form>
+            <p id="modal-msg" class="error-msg"></p>
+        </div>
+    </div>
+
+
     <script>
         // === Configuration ===
         const API_BASE = 'https://api.aiworldprogress.com/admin';
@@ -109,7 +143,8 @@
         let refreshInterval = null;
         let cachedSources = [];
 
-        // === Debug Log ===
+        // === Helper Functions ===
+
         function debug(msg) {
             console.log('[AIWP]', msg);
             const el = document.getElementById('debug-log');
@@ -118,8 +153,16 @@
                 el.innerHTML = `<div>${new Date().toLocaleTimeString()}: ${msg}</div>` + el.innerHTML;
             }
         }
+        
+        function safeDateFormat(timestamp) {
+            try {
+                if (!timestamp) return 'N/A';
+                return new Date(timestamp).toLocaleDateString();
+            } catch {
+                return 'Invalid Date';
+            }
+        }
 
-        // === XSS Escape ===
         function escapeHtml(text) {
             if (typeof text !== 'string') return text;
             const div = document.createElement('div');
@@ -127,8 +170,36 @@
             return div.innerHTML;
         }
 
-        // === Safe Fetch ===
-        async function safeFetch(url, options = {}) {
+        function setAuthUI(isLoggedIn) {
+            document.getElementById('logout-btn').style.display = isLoggedIn ? 'inline-block' : 'none';
+            document.getElementById('auth-status').textContent = isLoggedIn ? 'Logged In' : 'Not Logged In';
+            
+            document.getElementById('login-section').style.display = isLoggedIn ? 'none' : 'block';
+            document.getElementById('stats-section').style.display = isLoggedIn ? 'grid' : 'none';
+            document.getElementById('suggest-section').style.display = isLoggedIn ? 'block' : 'none';
+            document.getElementById('sources-section').style.display = isLoggedIn ? 'block' : 'none';
+            document.getElementById('feedback-section').style.display = isLoggedIn ? 'block' : 'none';
+
+            if (isLoggedIn) {
+                loadDashboardData();
+            } else {
+                clearInterval(refreshInterval);
+                refreshInterval = null;
+            }
+        }
+
+        function logout(showMsg = true) {
+            authToken = '';
+            localStorage.removeItem('admin_token');
+            setAuthUI(false);
+            if (showMsg) alert('Logged out due to inactivity or manual logout.');
+            debug('User logged out.');
+        }
+
+        // === API Fetch Wrapper ===
+
+        async function safeFetch(path, options = {}) {
+            const url = `${API_BASE}${path}`;
             const defaultHeaders = {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${authToken}`
@@ -145,45 +216,291 @@
                 try { data = JSON.parse(text); } catch { data = text; }
 
                 if (res.status === 401) {
-                    debug('401 Unauthorized -> Logging out');
+                    debug(`401 Unauthorized from ${path} -> Logging out`);
                     logout(false);
                     return null;
                 }
                 if (!res.ok) {
-                    debug(`HTTP ${res.status} Error: ${text}`);
+                    debug(`HTTP ${res.status} Error on ${path}: ${text}`);
                     alert(`Error: ${res.status}\nDetails: ${text.substring(0, 200)}`);
                     return null;
                 }
                 return data;
             } catch (e) {
-                debug(`Network error: ${e.message}`);
+                debug(`Network error on ${path}: ${e.message}`);
                 alert(`Network error: ${e.message}`);
                 return null;
             }
         }
+        
+        // === Data Loaders ===
 
-        // === Login ===
+        async function loadFeedback() {
+            const listEl = document.getElementById('feedback-list');
+            listEl.innerHTML = '<p class="loading">Loading feedback...</p>';
+            const data = await safeFetch('/feedback');
+            
+            if (data && Array.isArray(data)) {
+                document.getElementById('feedback-count').textContent = data.length;
+                if (data.length === 0) {
+                    listEl.innerHTML = '<p>No feedback messages yet.</p>';
+                    return;
+                }
+                
+                const table = `
+                    <table>
+                        <tr>
+                            <th style="width: 20%;">Date</th>
+                            <th style="width: 80%;">Message</th>
+                        </tr>
+                        ${data.map(f => `
+                            <tr>
+                                <td>${safeDateFormat(f.created_at)}</td>
+                                <td class="td-break">${escapeHtml(f.message)}</td>
+                            </tr>
+                        `).join('')}
+                    </table>
+                `;
+                listEl.innerHTML = table;
+            } else if (data === null) {
+                listEl.innerHTML = '<p class="error-msg">Failed to load feedback (Check console/login).</p>';
+            }
+        }
+
+        async function loadSuggestions() {
+            const listEl = document.getElementById('suggest-list');
+            listEl.innerHTML = '<p class="loading">Loading suggestions...</p>';
+            const data = await safeFetch('/suggest');
+
+            if (data && Array.isArray(data)) {
+                document.getElementById('suggest-count').textContent = data.length;
+                document.getElementById('suggest-count-inline').textContent = data.length;
+                
+                if (data.length === 0) {
+                    listEl.innerHTML = '<p>No pending source suggestions.</p>';
+                    return;
+                }
+                
+                const table = `
+                    <table>
+                        <tr>
+                            <th style="width: 20%;">Date</th>
+                            <th style="width: 40%;">URL</th>
+                            <th style="width: 30%;">Note</th>
+                            <th style="width: 10%;">Action</th>
+                        </tr>
+                        ${data.map(s => `
+                            <tr>
+                                <td>${safeDateFormat(s.created_at)}</td>
+                                <td><a href="${s.url}" target="_blank">${s.url}</a></td>
+                                <td class="td-break">${escapeHtml(s.note || 'N/A')}</td>
+                                <td><button class="btn btn-primary btn-link approve-suggest" data-url="${s.url}" data-id="${s.id}">Approve</button></td>
+                            </tr>
+                        `).join('')}
+                    </table>
+                `;
+                listEl.innerHTML = table;
+                attachSuggestListeners();
+            } else if (data === null) {
+                listEl.innerHTML = '<p class="error-msg">Failed to load suggestions (Check console/login).</p>';
+            }
+        }
+
+        async function loadSources() {
+            const listEl = document.getElementById('sources-list');
+            listEl.innerHTML = '<p class="loading">Loading sources...</p>';
+            const data = await safeFetch('/sources');
+            
+            if (data && Array.isArray(data)) {
+                cachedSources = data;
+                document.getElementById('source-count').textContent = data.length;
+                
+                if (data.length === 0) {
+                    listEl.innerHTML = '<p>No trusted sources added yet.</p>';
+                    return;
+                }
+
+                const table = `
+                    <table>
+                        <tr>
+                            <th style="width: 25%;">Name</th>
+                            <th style="width: 45%;">URL</th>
+                            <th style="width: 15%;">Trust Score</th>
+                            <th style="width: 15%;">Last Fetched</th>
+                        </tr>
+                        ${data.map(s => `
+                            <tr>
+                                <td>${escapeHtml(s.name)}</td>
+                                <td><a href="${s.url}" target="_blank">${s.url}</a></td>
+                                <td>${s.trust_score}%</td>
+                                <td>${safeDateFormat(s.last_fetched)}</td>
+                            </tr>
+                        `).join('')}
+                    </table>
+                `;
+                listEl.innerHTML = table;
+            } else if (data === null) {
+                listEl.innerHTML = '<p class="error-msg">Failed to load sources (Check console/login).</p>';
+            }
+        }
+
+        async function loadDashboardData() {
+            await Promise.all([
+                loadFeedback(),
+                loadSuggestions(),
+                loadSources()
+            ]);
+            // Set up auto refresh for feedback
+            clearInterval(refreshInterval);
+            refreshInterval = setInterval(loadFeedback, 5000); 
+        }
+
+        // === Event Handlers ===
+        
+        function attachSuggestListeners() {
+            document.querySelectorAll('.approve-suggest').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const url = e.target.getAttribute('data-url');
+                    const id = e.target.getAttribute('data-id');
+                    
+                    const name = prompt(`Enter a Name for this source (${url}):`);
+                    if (!name) return;
+
+                    const trust_score_str = prompt(`Enter a Trust Score (0-100) for ${name}:`, '70');
+                    const trust_score = parseInt(trust_score_str);
+
+                    if (isNaN(trust_score)) {
+                        alert('Invalid trust score.');
+                        return;
+                    }
+
+                    e.target.disabled = true;
+
+                    const sourceData = { name, url, trust_score, tier: 1 }; // Assuming tier 1 for approved
+                    
+                    const addRes = await safeFetch('/sources', {
+                        method: 'POST',
+                        body: JSON.stringify(sourceData)
+                    });
+
+                    if (addRes) {
+                        await safeFetch(`/suggest?id=${id}`, { method: 'DELETE' });
+                        alert(`Source ${name} approved and suggestion deleted.`);
+                        loadDashboardData(); 
+                    } else {
+                         e.target.disabled = false;
+                    }
+                });
+            });
+        }
+
         document.getElementById('login-btn').addEventListener('click', async () => {
             const key = document.getElementById('admin-key').value.trim();
+            const loginMsg = document.getElementById('login-msg');
+            
             if (!key) {
-                document.getElementById('login-msg').textContent = 'Enter ADMIN_KEY';
+                loginMsg.textContent = 'Enter ADMIN_KEY';
                 return;
             }
 
-            debug('Logging in...');
+            debug('Attempting login...');
             document.getElementById('login-btn').disabled = true;
-            document.getElementById('login-msg').textContent = 'Logging in...';
+            loginMsg.textContent = 'Logging in...';
 
-            const data = await safeFetch(`${API_BASE}/login`, {
+            // Send login request
+            const data = await safeFetch('/login', {
                 method: 'POST',
+                // Note: The /login route is public, so we intentionally skip the Bearer token here
+                headers: { 'Content-Type': 'application/json', 'Authorization': '' }, 
                 body: JSON.stringify({ key })
             });
 
             document.getElementById('login-btn').disabled = false;
-
+            
             if (data && data.token) {
                 authToken = data.token;
                 localStorage.setItem('admin_token', authToken);
-                document.getElementById('auth-status').textContent = 'Logged In';
-                document.getElementById('login-section').style.display = 'none';
-                document.getElementById
+                loginMsg.textContent = 'Login successful!';
+                setAuthUI(true);
+            } else {
+                loginMsg.textContent = data ? (data.error || 'Login failed. Check your key.') : 'Login failed (Network or Server Error).';
+            }
+        });
+
+        document.getElementById('logout-btn').addEventListener('click', () => {
+            logout(true);
+        });
+
+        // Add Source Modal Handlers
+        const modal = document.getElementById('source-modal');
+        document.getElementById('add-source-btn').addEventListener('click', () => {
+            document.getElementById('add-source-form').reset();
+            document.getElementById('modal-msg').textContent = '';
+            modal.style.display = 'block';
+        });
+        document.querySelector('.close-btn').addEventListener('click', () => {
+            modal.style.display = 'none';
+        });
+        window.addEventListener('click', (event) => {
+            if (event.target == modal) {
+                modal.style.display = 'none';
+            }
+        });
+
+        // Add Source Submission
+        document.getElementById('add-source-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('source-name').value.trim();
+            const url = document.getElementById('source-url').value.trim();
+            const trust_score = parseInt(document.getElementById('source-trust').value);
+            const submitBtn = document.getElementById('modal-submit-btn');
+            const msgEl = document.getElementById('modal-msg');
+
+            if (!name || !url || isNaN(trust_score)) {
+                msgEl.textContent = 'Please fill all required fields correctly.';
+                return;
+            }
+
+            submitBtn.disabled = true;
+            msgEl.textContent = 'Adding source...';
+
+            const sourceData = { name, url, trust_score, tier: 1 };
+            
+            const res = await safeFetch('/sources', {
+                method: 'POST',
+                body: JSON.stringify(sourceData)
+            });
+
+            submitBtn.disabled = false;
+
+            if (res) {
+                msgEl.textContent = 'Source added successfully!';
+                modal.style.display = 'none';
+                loadSources();
+            } else {
+                msgEl.textContent = 'Failed to add source. Check console for details.';
+            }
+        });
+
+        document.getElementById('run-scraper-btn').addEventListener('click', async (e) => {
+            e.target.disabled = true;
+            alert('Sending manual run request. Check your Cloudflare Worker logs for execution status.');
+            
+            // This endpoint needs to be configured in your Worker to trigger the scraping logic
+            const res = await safeFetch('/run-scraper', { method: 'POST' }); 
+
+            if (res) {
+                alert('Scraper run request sent successfully!');
+            }
+            e.target.disabled = false;
+        });
+
+        // === Initialization ===
+
+        // Check for existing token and set initial UI state
+        if (authToken) {
+            setAuthUI(true);
+        }
+    </script>
+</body>
+</html>
