@@ -108,6 +108,7 @@
     const API_BASE = 'https://api.aiworldprogress.com/admin';
     let authToken = localStorage.getItem('admin_token');
     let refreshInterval;
+    let cachedSources = []; // ← 缓存可信源
 
     // === XSS Protection ===
     function escapeHtml(text) {
@@ -120,10 +121,7 @@
     // === Login ===
     document.getElementById('login-btn').addEventListener('click', async () => {
       const key = document.getElementById('admin-key').value.trim();
-      if (!key) {
-        document.getElementById('login-msg').textContent = 'Enter ADMIN_KEY';
-        return;
-      }
+      if (!key) return;
 
       try {
         const res = await fetch(`${API_BASE}/login`, {
@@ -139,32 +137,30 @@
           localStorage.setItem('admin_token', authToken);
           document.getElementById('auth-status').textContent = 'Logged In';
           document.getElementById('login-section').style.display = 'none';
-          console.log('Login successful');
           loadAll();
           startAutoRefresh();
         } else {
           document.getElementById('login-msg').textContent = data.error || 'Invalid Key';
         }
       } catch (e) {
-        console.error('Login error:', e);
+        console.error(e);
         document.getElementById('login-msg').textContent = 'Network error';
       }
     });
 
-    // === Auto Refresh ===
+    // === Auto Refresh (只刷新实时模块) ===
     function startAutoRefresh() {
       if (refreshInterval) clearInterval(refreshInterval);
       refreshInterval = setInterval(() => {
         loadStats();
         loadFeedback();
         loadSuggest();
-        loadSources(); // ← 确保刷新
+        // 可信源不自动刷新，防止覆盖
       }, 5000);
     }
 
-    // === Load All Data (100% Reliable) ===
+    // === Load All Data ===
     async function loadAll() {
-      console.log('loadAll() started');
       try {
         const [stats, feedback, suggest, sources] = await Promise.all([
           safeFetch(`${API_BASE}/stats`),
@@ -173,44 +169,44 @@
           safeFetch(`${API_BASE}/sources`)
         ]);
 
-        // Update Stats
-        document.getElementById('feedback-count').textContent = (stats?.feedback || 0);
-        document.getElementById('suggest-count').textContent = (stats?.suggest || 0);
-        document.getElementById('source-count').textContent = (stats?.sources || 0);
+        // 更新统计
+        document.getElementById('feedback-count').textContent = stats?.feedback || 0;
+        document.getElementById('suggest-count').textContent = stats?.suggest || 0;
+        document.getElementById('source-count').textContent = stats?.sources || 0;
 
-        // Show Sections
+        // 显示模块
         document.getElementById('stats-section').style.display = 'grid';
         document.getElementById('feedback-section').style.display = 'block';
         document.getElementById('suggest-section').style.display = 'block';
         document.getElementById('sources-section').style.display = 'block';
 
-        // Render
+        // 渲染
         loadFeedback(feedback || []);
         loadSuggest(suggest || []);
-        loadSources(sources || []);
-
-        console.log('All data loaded:', { stats, feedback, suggest, sources });
+        cachedSources = sources || [];
+        loadSources(cachedSources);
 
       } catch (e) {
-        console.error('loadAll failed:', e);
-        alert('Data load failed. Check console.');
+        console.error('loadAll error:', e);
       }
     }
 
-    // === Safe Fetch with 401 Handling ===
-    async function safeFetch(url) {
+    // === Safe Fetch ===
+    async function safeFetch(url, method = 'GET', body = null) {
       try {
         const res = await fetch(url, {
-          headers: { 'Authorization': `Bearer ${authToken}` }
+          method,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: body ? JSON.stringify(body) : null
         });
-        if (res.status === 401) {
-          logout();
-          return null;
-        }
-        return res.ok ? await res.json() : [];
+        if (res.status === 401) { logout(); return null; }
+        return res.ok ? await res.json() : null;
       } catch (e) {
-        console.error(`Fetch failed: ${url}`, e);
-        return [];
+        console.error('safeFetch error:', e);
+        return null;
       }
     }
 
@@ -232,7 +228,7 @@
           <tr><th>Time</th><th>Message</th></tr>
           ${data.map(i => `<tr><td>${new Date(i.created_at).toLocaleString()}</td><td>${escapeHtml(i.message)}</td></tr>`).join('')}
         </table>
-      ` : '<p>No feedback yet</p>';
+      ` : '< a<p>No feedback yet</p>';
       const el = document.getElementById('feedback-list');
       if (el) el.innerHTML = html;
     }
@@ -260,10 +256,9 @@
       if (el) el.innerHTML = html;
     }
 
-    // === Trusted Sources (FIXED) ===
+    // === Trusted Sources (使用缓存) ===
     function loadSources(items) {
-      console.log('loadSources() called with:', items); // ← 调试
-      const data = Array.isArray(items) ? items : [];
+      const data = Array.isArray(items) ? items : cachedSources;
       const html = data.length ? `
         <table>
           <tr><th>Name</th><th>RSS URL</th><th>Status</th><th>Action</th></tr>
@@ -282,69 +277,3 @@
       const el = document.getElementById('sources-list');
       if (el) el.innerHTML = html;
     }
-
-    // === Actions ===
-    window.approveSuggest = async (id) => {
-      if (!confirm('Approve this source?')) return;
-      const url = prompt('RSS URL:');
-      const name = prompt('Source Name:');
-      if (!url || !name) return;
-      await safeFetch(`${API_BASE}/suggest/${id}/approve`, 'POST', { url, name });
-      loadSuggest(); loadSources();
-    };
-
-    window.rejectSuggest = async (id) => {
-      if (!confirm('Reject?')) return;
-      await safeFetch(`${API_BASE}/suggest/${id}/reject`, 'DELETE');
-      loadSuggest();
-    };
-
-    window.deleteSource = async (id) => {
-      if (!confirm('Delete?')) return;
-      await safeFetch(`${API_BASE}/sources/${id}`, 'DELETE');
-      loadSources();
-    };
-
-    document.getElementById('add-source-btn')?.addEventListener('click', async () => {
-      const name = prompt('Source Name:');
-      const url = prompt('RSS URL:');
-      if (!name || !url) return;
-      await safeFetch(`${API_BASE}/sources`, 'POST', { name, url });
-      loadSources();
-    });
-
-    async function safeFetch(url, method = 'GET', body = null) {
-      try {
-        const res = await fetch(url, {
-          method,
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${authToken}`
-          },
-          body: body ? JSON.stringify(body) : null
-        });
-        if (res.status === 401) { logout(); return; }
-        return res.ok ? await res.json() : null;
-      } catch (e) {
-        console.error('safeFetch error:', e);
-        return null;
-      }
-    }
-
-    // === Logout ===
-    function logout() {
-      localStorage.removeItem('admin_token');
-      clearInterval(refreshInterval);
-      location.reload();
-    }
-
-    // === Init ===
-    if (authToken) {
-      document.getElementById('auth-status').textContent = 'Logged In';
-      document.getElementById('login-section').style.display = 'none';
-      loadAll();
-      startAutoRefresh();
-    }
-  </script>
-</body>
-</html>
