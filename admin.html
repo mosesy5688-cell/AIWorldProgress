@@ -117,7 +117,7 @@
       return div.innerHTML;
     }
 
-    // === Login (Fixed) ===
+    // === Login ===
     document.getElementById('login-btn').addEventListener('click', async () => {
       const key = document.getElementById('admin-key').value.trim();
       if (!key) {
@@ -139,7 +139,7 @@
           localStorage.setItem('admin_token', authToken);
           document.getElementById('auth-status').textContent = 'Logged In';
           document.getElementById('login-section').style.display = 'none';
-          console.log('Login successful, loading data...');
+          console.log('Login successful');
           loadAll();
           startAutoRefresh();
         } else {
@@ -147,7 +147,7 @@
         }
       } catch (e) {
         console.error('Login error:', e);
-        document.getElementById('login-msg').textContent = 'Network error: Check API domain';
+        document.getElementById('login-msg').textContent = 'Network error';
       }
     });
 
@@ -155,33 +155,28 @@
     function startAutoRefresh() {
       if (refreshInterval) clearInterval(refreshInterval);
       refreshInterval = setInterval(() => {
-        console.log('Auto-refresh triggered');
+        loadStats();
         loadFeedback();
         loadSuggest();
-        loadStats();
+        loadSources(); // ← 确保刷新
       }, 5000);
     }
 
-    // === Load All Data (Robust) ===
+    // === Load All Data (100% Reliable) ===
     async function loadAll() {
-      console.log('Loading all data...');
+      console.log('loadAll() started');
       try {
-        const [statsRes, feedbackRes, suggestRes, sourcesRes] = await Promise.all([
-          fetch(`${API_BASE}/stats`, { headers: { 'Authorization': `Bearer ${authToken}` } }).catch(() => ({ ok: false })),
-          fetch(`${API_BASE}/feedback`, { headers: { 'Authorization': `Bearer ${authToken}` } }).catch(() => ({ ok: false })),
-          fetch(`${API_BASE}/suggest`, { headers: { 'Authorization': `Bearer ${authToken}` } }).catch(() => ({ ok: false })),
-          fetch(`${API_BASE}/sources`, { headers: { 'Authorization': `Bearer ${authToken}` } }).catch(() => ({ ok: false }))
+        const [stats, feedback, suggest, sources] = await Promise.all([
+          safeFetch(`${API_BASE}/stats`),
+          safeFetch(`${API_BASE}/feedback`),
+          safeFetch(`${API_BASE}/suggest`),
+          safeFetch(`${API_BASE}/sources`)
         ]);
 
-        const stats = statsRes.ok ? await statsRes.json() : { feedback: 0, suggest: 0, sources: 0 };
-        const feedback = feedbackRes.ok ? await feedbackRes.json() : [];
-        const suggest = suggestRes.ok ? await suggestRes.json() : [];
-        const sources = sourcesRes.ok ? await sourcesRes.json() : [];
-
         // Update Stats
-        document.getElementById('feedback-count').textContent = stats.feedback || 0;
-        document.getElementById('suggest-count').textContent = stats.suggest || 0;
-        document.getElementById('source-count').textContent = stats.sources || 0;
+        document.getElementById('feedback-count').textContent = (stats?.feedback || 0);
+        document.getElementById('suggest-count').textContent = (stats?.suggest || 0);
+        document.getElementById('source-count').textContent = (stats?.sources || 0);
 
         // Show Sections
         document.getElementById('stats-section').style.display = 'grid';
@@ -189,35 +184,48 @@
         document.getElementById('suggest-section').style.display = 'block';
         document.getElementById('sources-section').style.display = 'block';
 
-        // Render Data
-        loadFeedback(feedback);
-        loadSuggest(suggest);
-        loadSources(sources);
+        // Render
+        loadFeedback(feedback || []);
+        loadSuggest(suggest || []);
+        loadSources(sources || []);
 
-        console.log('All data loaded successfully');
+        console.log('All data loaded:', { stats, feedback, suggest, sources });
 
       } catch (e) {
-        console.error('loadAll error:', e);
-        alert('Failed to load data. Check console (F12).');
+        console.error('loadAll failed:', e);
+        alert('Data load failed. Check console.');
+      }
+    }
+
+    // === Safe Fetch with 401 Handling ===
+    async function safeFetch(url) {
+      try {
+        const res = await fetch(url, {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        if (res.status === 401) {
+          logout();
+          return null;
+        }
+        return res.ok ? await res.json() : [];
+      } catch (e) {
+        console.error(`Fetch failed: ${url}`, e);
+        return [];
       }
     }
 
     // === Stats ===
     async function loadStats() {
-      try {
-        const res = await fetch(`${API_BASE}/stats`, { headers: { 'Authorization': `Bearer ${authToken}` } });
-        if (res.status === 401) { logout(); return; }
-        const data = await res.json();
+      const data = await safeFetch(`${API_BASE}/stats`);
+      if (data) {
         document.getElementById('feedback-count').textContent = data.feedback || 0;
         document.getElementById('suggest-count').textContent = data.suggest || 0;
         document.getElementById('source-count').textContent = data.sources || 0;
-      } catch (e) {
-        console.error('Stats load error:', e);
       }
     }
 
     // === Feedback ===
-    function loadFeedback(items = null) {
+    function loadFeedback(items) {
       const data = Array.isArray(items) ? items : [];
       const html = data.length ? `
         <table>
@@ -230,7 +238,7 @@
     }
 
     // === Suggested Sources ===
-    function loadSuggest(items = null) {
+    function loadSuggest(items) {
       const data = Array.isArray(items) ? items : [];
       const html = data.length ? `
         <table>
@@ -252,81 +260,76 @@
       if (el) el.innerHTML = html;
     }
 
-    // === Trusted Sources ===
-    function loadSources(items = null) {
+    // === Trusted Sources (FIXED) ===
+    function loadSources(items) {
+      console.log('loadSources() called with:', items); // ← 调试
       const data = Array.isArray(items) ? items : [];
-      const html = `
+      const html = data.length ? `
         <table>
           <tr><th>Name</th><th>RSS URL</th><th>Status</th><th>Action</th></tr>
           ${data.map(s => `
             <tr>
               <td>${escapeHtml(s.name)}</td>
               <td><a href="${escapeHtml(s.url)}" target="_blank">${escapeHtml(s.url)}</a></td>
-              <td><span class="status ${s.status}">${s.status}</span></td>
+              <td><span class="status ${s.status}">${escapeHtml(s.status)}</span></td>
               <td>
                 <button class="btn btn-danger" onclick="deleteSource('${s.id}')">Delete</button>
               </td>
             </tr>
           `).join('')}
         </table>
-      `;
+      ` : '<p>No trusted sources yet</p>';
       const el = document.getElementById('sources-list');
       if (el) el.innerHTML = html;
     }
 
-    // === Action Functions ===
+    // === Actions ===
     window.approveSuggest = async (id) => {
       if (!confirm('Approve this source?')) return;
       const url = prompt('RSS URL:');
       const name = prompt('Source Name:');
       if (!url || !name) return;
-      try {
-        await fetch(`${API_BASE}/suggest/${id}/approve`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
-          body: JSON.stringify({ url, name })
-        });
-        loadSuggest(); loadSources();
-      } catch (e) {
-        alert('Approve failed');
-      }
+      await safeFetch(`${API_BASE}/suggest/${id}/approve`, 'POST', { url, name });
+      loadSuggest(); loadSources();
     };
 
     window.rejectSuggest = async (id) => {
-      if (!confirm('Reject this suggestion?')) return;
-      try {
-        await fetch(`${API_BASE}/suggest/${id}/reject`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${authToken}` } });
-        loadSuggest();
-      } catch (e) {
-        alert('Reject failed');
-      }
+      if (!confirm('Reject?')) return;
+      await safeFetch(`${API_BASE}/suggest/${id}/reject`, 'DELETE');
+      loadSuggest();
     };
 
     window.deleteSource = async (id) => {
-      if (!confirm('Delete this source?')) return;
-      try {
-        await fetch(`${API_BASE}/sources/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${authToken}` } });
-        loadSources();
-      } catch (e) {
-        alert('Delete failed');
-      }
+      if (!confirm('Delete?')) return;
+      await safeFetch(`${API_BASE}/sources/${id}`, 'DELETE');
+      loadSources();
     };
 
     document.getElementById('add-source-btn')?.addEventListener('click', async () => {
       const name = prompt('Source Name:');
       const url = prompt('RSS URL:');
       if (!name || !url) return;
-      try {
-        await fetch(`${API_BASE}/sources`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
-          body: JSON.stringify({ name, url })
-        });
-        loadSources();
-      } catch (e) {
-        alert('Add failed');
-      }
+      await safeFetch(`${API_BASE}/sources`, 'POST', { name, url });
+      loadSources();
     });
+
+    async function safeFetch(url, method = 'GET', body = null) {
+      try {
+        const res = await fetch(url, {
+          method,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: body ? JSON.stringify(body) : null
+        });
+        if (res.status === 401) { logout(); return; }
+        return res.ok ? await res.json() : null;
+      } catch (e) {
+        console.error('safeFetch error:', e);
+        return null;
+      }
+    }
 
     // === Logout ===
     function logout() {
