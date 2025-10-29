@@ -38,6 +38,7 @@
     .stat-card { background: white; padding: 1.5rem; border-radius: 12px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
     .stat-value { font-size: 2rem; font-weight: 800; color: var(--blue); }
     .stat-label { color: var(--gray); font-size: 0.875rem; }
+    .error { color: var(--red); font-size: 0.875rem; }
   </style>
 </head>
 <body>
@@ -63,7 +64,7 @@
         <input type="password" id="admin-key" class="input" placeholder="Enter your ADMIN_KEY" />
       </div>
       <button id="login-btn" class="btn btn-primary">Login</button>
-      <p id="login-msg" style="color: red;"></p>
+      <p id="login-msg" class="error"></p>
     </div>
 
     <!-- Stats -->
@@ -116,29 +117,37 @@
       return div.innerHTML;
     }
 
-    // === Login ===
+    // === Login (Fixed) ===
     document.getElementById('login-btn').addEventListener('click', async () => {
       const key = document.getElementById('admin-key').value.trim();
-      if (!key) return;
+      if (!key) {
+        document.getElementById('login-msg').textContent = 'Enter ADMIN_KEY';
+        return;
+      }
+
       try {
         const res = await fetch(`${API_BASE}/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ key })
         });
+
         const data = await res.json();
+
         if (res.ok && data.token) {
           authToken = data.token;
           localStorage.setItem('admin_token', authToken);
           document.getElementById('auth-status').textContent = 'Logged In';
           document.getElementById('login-section').style.display = 'none';
+          console.log('Login successful, loading data...');
           loadAll();
           startAutoRefresh();
         } else {
           document.getElementById('login-msg').textContent = data.error || 'Invalid Key';
         }
       } catch (e) {
-        document.getElementById('login-msg').textContent = 'Network Error';
+        console.error('Login error:', e);
+        document.getElementById('login-msg').textContent = 'Network error: Check API domain';
       }
     });
 
@@ -146,54 +155,87 @@
     function startAutoRefresh() {
       if (refreshInterval) clearInterval(refreshInterval);
       refreshInterval = setInterval(() => {
+        console.log('Auto-refresh triggered');
         loadFeedback();
         loadSuggest();
         loadStats();
       }, 5000);
     }
 
-    // === Load All Data ===
+    // === Load All Data (Robust) ===
     async function loadAll() {
-      await Promise.all([loadStats(), loadFeedback(), loadSuggest(), loadSources()]);
-      document.getElementById('stats-section').style.display = 'grid';
-      document.getElementById('feedback-section').style.display = 'block';
-      document.getElementById('suggest-section').style.display = 'block';
-      document.getElementById('sources-section').style.display = 'block';
+      console.log('Loading all data...');
+      try {
+        const [statsRes, feedbackRes, suggestRes, sourcesRes] = await Promise.all([
+          fetch(`${API_BASE}/stats`, { headers: { 'Authorization': `Bearer ${authToken}` } }).catch(() => ({ ok: false })),
+          fetch(`${API_BASE}/feedback`, { headers: { 'Authorization': `Bearer ${authToken}` } }).catch(() => ({ ok: false })),
+          fetch(`${API_BASE}/suggest`, { headers: { 'Authorization': `Bearer ${authToken}` } }).catch(() => ({ ok: false })),
+          fetch(`${API_BASE}/sources`, { headers: { 'Authorization': `Bearer ${authToken}` } }).catch(() => ({ ok: false }))
+        ]);
+
+        const stats = statsRes.ok ? await statsRes.json() : { feedback: 0, suggest: 0, sources: 0 };
+        const feedback = feedbackRes.ok ? await feedbackRes.json() : [];
+        const suggest = suggestRes.ok ? await suggestRes.json() : [];
+        const sources = sourcesRes.ok ? await sourcesRes.json() : [];
+
+        // Update Stats
+        document.getElementById('feedback-count').textContent = stats.feedback || 0;
+        document.getElementById('suggest-count').textContent = stats.suggest || 0;
+        document.getElementById('source-count').textContent = stats.sources || 0;
+
+        // Show Sections
+        document.getElementById('stats-section').style.display = 'grid';
+        document.getElementById('feedback-section').style.display = 'block';
+        document.getElementById('suggest-section').style.display = 'block';
+        document.getElementById('sources-section').style.display = 'block';
+
+        // Render Data
+        loadFeedback(feedback);
+        loadSuggest(suggest);
+        loadSources(sources);
+
+        console.log('All data loaded successfully');
+
+      } catch (e) {
+        console.error('loadAll error:', e);
+        alert('Failed to load data. Check console (F12).');
+      }
     }
 
     // === Stats ===
     async function loadStats() {
-      const res = await fetch(`${API_BASE}/stats`, { headers: { 'Authorization': `Bearer ${authToken}` } });
-      if (res.status === 401) { logout(); return; }
-      const data = await res.json();
-      document.getElementById('feedback-count').textContent = data.feedback || 0;
-      document.getElementById('suggest-count').textContent = data.suggest || 0;
-      document.getElementById('source-count').textContent = data.sources || 0;
+      try {
+        const res = await fetch(`${API_BASE}/stats`, { headers: { 'Authorization': `Bearer ${authToken}` } });
+        if (res.status === 401) { logout(); return; }
+        const data = await res.json();
+        document.getElementById('feedback-count').textContent = data.feedback || 0;
+        document.getElementById('suggest-count').textContent = data.suggest || 0;
+        document.getElementById('source-count').textContent = data.sources || 0;
+      } catch (e) {
+        console.error('Stats load error:', e);
+      }
     }
 
     // === Feedback ===
-    async function loadFeedback() {
-      const res = await fetch(`${API_BASE}/feedback`, { headers: { 'Authorization': `Bearer ${authToken}` } });
-      if (res.status === 401) { logout(); return; }
-      const items = await res.json();
-      const html = items.length ? `
+    function loadFeedback(items = null) {
+      const data = Array.isArray(items) ? items : [];
+      const html = data.length ? `
         <table>
           <tr><th>Time</th><th>Message</th></tr>
-          ${items.map(i => `<tr><td>${new Date(i.created_at).toLocaleString()}</td><td>${escapeHtml(i.message)}</td></tr>`).join('')}
+          ${data.map(i => `<tr><td>${new Date(i.created_at).toLocaleString()}</td><td>${escapeHtml(i.message)}</td></tr>`).join('')}
         </table>
       ` : '<p>No feedback yet</p>';
-      document.getElementById('feedback-list').innerHTML = html;
+      const el = document.getElementById('feedback-list');
+      if (el) el.innerHTML = html;
     }
 
     // === Suggested Sources ===
-    async function loadSuggest() {
-      const res = await fetch(`${API_BASE}/suggest`, { headers: { 'Authorization': `Bearer ${authToken}` } });
-      if (res.status === 401) { logout(); return; }
-      const items = await res.json();
-      const html = items.length ? `
+    function loadSuggest(items = null) {
+      const data = Array.isArray(items) ? items : [];
+      const html = data.length ? `
         <table>
           <tr><th>URL</th><th>Note</th><th>Time</th><th>Action</th></tr>
-          ${items.map(i => `
+          ${data.map(i => `
             <tr>
               <td><a href="${escapeHtml(i.url)}" target="_blank">${escapeHtml(i.url)}</a></td>
               <td>${escapeHtml(i.note || '-')}</td>
@@ -206,18 +248,17 @@
           `).join('')}
         </table>
       ` : '<p>No pending suggestions</p>';
-      document.getElementById('suggest-list').innerHTML = html;
+      const el = document.getElementById('suggest-list');
+      if (el) el.innerHTML = html;
     }
 
     // === Trusted Sources ===
-    async function loadSources() {
-      const res = await fetch(`${API_BASE}/sources`, { headers: { 'Authorization': `Bearer ${authToken}` } });
-      if (res.status === 401) { logout(); return; }
-      const items = await res.json();
+    function loadSources(items = null) {
+      const data = Array.isArray(items) ? items : [];
       const html = `
         <table>
           <tr><th>Name</th><th>RSS URL</th><th>Status</th><th>Action</th></tr>
-          ${items.map(s => `
+          ${data.map(s => `
             <tr>
               <td>${escapeHtml(s.name)}</td>
               <td><a href="${escapeHtml(s.url)}" target="_blank">${escapeHtml(s.url)}</a></td>
@@ -229,7 +270,8 @@
           `).join('')}
         </table>
       `;
-      document.getElementById('sources-list').innerHTML = html;
+      const el = document.getElementById('sources-list');
+      if (el) el.innerHTML = html;
     }
 
     // === Action Functions ===
@@ -238,36 +280,52 @@
       const url = prompt('RSS URL:');
       const name = prompt('Source Name:');
       if (!url || !name) return;
-      await fetch(`${API_BASE}/suggest/${id}/approve`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
-        body: JSON.stringify({ url, name })
-      });
-      loadSuggest(); loadSources();
+      try {
+        await fetch(`${API_BASE}/suggest/${id}/approve`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+          body: JSON.stringify({ url, name })
+        });
+        loadSuggest(); loadSources();
+      } catch (e) {
+        alert('Approve failed');
+      }
     };
 
     window.rejectSuggest = async (id) => {
       if (!confirm('Reject this suggestion?')) return;
-      await fetch(`${API_BASE}/suggest/${id}/reject`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${authToken}` } });
-      loadSuggest();
+      try {
+        await fetch(`${API_BASE}/suggest/${id}/reject`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${authToken}` } });
+        loadSuggest();
+      } catch (e) {
+        alert('Reject failed');
+      }
     };
 
     window.deleteSource = async (id) => {
       if (!confirm('Delete this source?')) return;
-      await fetch(`${API_BASE}/sources/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${authToken}` } });
-      loadSources();
+      try {
+        await fetch(`${API_BASE}/sources/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${authToken}` } });
+        loadSources();
+      } catch (e) {
+        alert('Delete failed');
+      }
     };
 
-    document.getElementById('add-source-btn').addEventListener('click', async () => {
+    document.getElementById('add-source-btn')?.addEventListener('click', async () => {
       const name = prompt('Source Name:');
       const url = prompt('RSS URL:');
       if (!name || !url) return;
-      await fetch(`${API_BASE}/sources`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
-        body: JSON.stringify({ name, url })
-      });
-      loadSources();
+      try {
+        await fetch(`${API_BASE}/sources`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+          body: JSON.stringify({ name, url })
+        });
+        loadSources();
+      } catch (e) {
+        alert('Add failed');
+      }
     });
 
     // === Logout ===
