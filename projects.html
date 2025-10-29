@@ -1,90 +1,122 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AI Project Tracker - AI World Progress</title>
-  <meta name="description" content="Real-time status of major AI initiatives worldwide. Updated automatically." />
-  <meta property="og:title" content="AI Project Tracker - AIWP" />
-  <meta property="og:description" content="Track the progress of Llama, GPT, Gemini, and more." />
-  <meta property="og:type" content="website" />
-  <meta property="og:url" content="https://aiworldprogress.com/projects.html" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src 'self' https://api.aiworldprogress.com; style-src 'self' 'unsafe-inline'; img-src * data:;">
-  <link rel="manifest" href="/manifest.json" />
-  <link rel="icon" href="/favicon.ico" />
-  <style>
-    :root { --blue: #2563eb; --gray: #6b7280; }
-    body { font-family: system-ui, sans-serif; margin: 0; background: #f9fafb; line-height: 1.6; }
-    header { background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); position: sticky; top: 0; z-index: 10; }
-    nav { max-width: 1200px; margin: auto; padding: 1rem; display: flex; gap: 1.5rem; align-items: center; flex-wrap: wrap; }
-    .logo { font-weight: 800; font-size: 1.5rem; color: var(--blue); text-decoration: none; }
-    a { color: #374151; text-decoration: none; font-weight: 500; }
-    a:hover { color: var(--blue); }
-    main { max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
-    .project { border: 1px solid #e5e7eb; border-radius: 12px; padding: 1.25rem; margin-bottom: 1.25rem; background: white; }
-    .project h3 { margin: 0 0 0.5rem; color: var(--blue); font-size: 1.3rem; }
-    .status { display: inline-block; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
-    .status.active { background: #dcfce7; color: #166534; }
-    .status.beta { background: #fef3c7; color: #92400e; }
-    .status.development { background: #fee2e2; color: #991b1b; }
-    .meta { font-size: 0.875rem; color: var(--gray); margin-top: 0.5rem; }
-    .loading { text-align: center; padding: 2rem; color: var(--gray); }
-    footer { text-align: center; padding: 2rem; color: var(--gray); font-size: 0.875rem; border-top: 1px solid #e5e7eb; margin-top: 3rem; }
-  </style>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Project Tracker - AI World Progress</title>
+    <meta name="description" content="Real-time status of major AI initiatives worldwide. Updated automatically." />
+    <meta property="og:title" content="AI Project Tracker - AIWP" />
+    <meta property="og:description" content="Track the progress of Llama, GPT, Gemini, and more." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://aiworldprogress.com/projects.html" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src 'self' https://api.aiworldprogress.com; style-src 'self' 'unsafe-inline'; img-src * data:;">
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" href="/favicon.ico" />
+    <style>
+        :root { --blue: #2563eb; --gray: #6b7280; }
+        body { font-family: system-ui, sans-serif; margin: 0; background: #f9fafb; line-height: 1.6; }
+        header { background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); position: sticky; top: 0; z-index: 10; }
+        nav { max-width: 1200px; margin: auto; padding: 1rem; display: flex; gap: 1.5rem; align-items: center; flex-wrap: wrap; }
+        .logo { font-weight: 800; font-size: 1.5rem; color: var(--blue); text-decoration: none; }
+        a { color: #374151; text-decoration: none; font-weight: 500; }
+        a:hover { color: var(--blue); }
+        main { max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
+        .project { border: 1px solid #e5e7eb; border-radius: 12px; padding: 1.25rem; margin-bottom: 1.25rem; background: white; transition: box-shadow 0.2s; }
+        .project:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+        .project h3 { margin: 0 0 0.5rem; color: var(--blue); font-size: 1.3rem; }
+        .status { display: inline-block; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
+        .status.active { background: #dcfce7; color: #166534; }
+        .status.beta { background: #fef3c7; color: #92400e; }
+        .status.development { background: #fee2e2; color: #991b1b; }
+        .status.archived { background: #e5e7eb; color: #4b5563; } /* Added an extra status for completeness */
+        .meta { font-size: 0.875rem; color: var(--gray); margin-top: 0.5rem; }
+        .loading { text-align: center; padding: 2rem; color: var(--gray); }
+        footer { text-align: center; padding: 2rem; color: var(--gray); font-size: 0.875rem; border-top: 1px solid #e5e7eb; margin-top: 3rem; }
+    </style>
 </head>
 <body>
-  <header>
-    <nav>
-      <a href="/" class="logo">AIWP</a>
-      <a href="/projects.html">Projects</a>
-      <a href="/reports.html">Reports</a>
-      <a href="/feedback.html">Feedback</a>
-      <a href="/suggest.html">Suggest</a>
-      <a href="/about.html">About</a>
-    </nav>
-  </header>
+    <header>
+        <nav>
+            <a href="/" class="logo">AIWP</a>
+            <a href="/projects.html">Projects</a>
+            <a href="/reports.html">Reports</a>
+            <a href="/feedback.html">Feedback</a>
+            <a href="/suggest.html">Suggest</a>
+            <a href="/about.html">About</a>
+        </nav>
+    </header>
 
-  <main>
-    <h1>AI Project Tracker</h1>
-    <p>Real-time status of major AI initiatives worldwide.</p>
-    <div id="projects" class="loading">Loading projects...</div>
-  </main>
+    <main>
+        <h1>AI Project Tracker</h1>
+        <p>Real-time status of major AI initiatives worldwide.</p>
+        <div id="projects" class="loading">Loading projects...</div>
+    </main>
 
-  <footer>
-    All data released under <strong>CC0</strong> | <a href="https://x.com/AIWorldProgress" target="_blank">@AIWorldProgress</a>
-  </footer>
+    <footer>
+        All data released under <strong>CC0</strong> | <a href="https://x.com/AIWorldProgress" target="_blank">@AIWorldProgress</a>
+    </footer>
 
-  <script>
-    const API_BASE = `https://api.${location.hostname}`;
+    <script>
+        // === Configuration and Helpers ===
 
-    async function loadProjects() {
-      try {
-        const res = await fetch(`${API_BASE}/projects`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const projects = await res.json();
-        const container = document.getElementById('projects');
-        if (!projects.length) {
-          container.innerHTML = '<p class="loading">No projects tracked yet.</p>';
-          return;
+        // Use the custom domain for production, or a fallback for local testing
+        const API_BASE = (location.hostname === 'localhost' || location.hostname.includes('127.0.0.1'))
+            ? 'https://api.aiworldprogress.com' 
+            : `https://api.${location.hostname}`;
+            
+        function safeDateFormat(timestamp) {
+            try {
+                if (!timestamp) return 'N/A';
+                return new Date(timestamp).toLocaleDateString();
+            } catch (e) {
+                return 'Invalid Date';
+            }
         }
-        container.innerHTML = projects.map(p => `
-          <div class="project">
-            <h3>${p.name}</h3>
-            <p>${p.description || 'No description available.'}</p>
-            <div>
-              <span class="status ${p.status.toLowerCase()}">${p.status}</span>
-            </div>
-            <div class="meta">Last updated: ${new Date(p.updated_at).toLocaleDateString()}</div>
-          </div>
-        `).join('');
-      } catch (e) {
-        document.getElementById('projects').innerHTML = `<p class="loading">Error: ${e.message}</p>`;
-      }
-    }
-    loadProjects();
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js');
-    }
-  </script>
+
+        // === Core Logic ===
+
+        async function loadProjects() {
+            const container = document.getElementById('projects');
+            try {
+                // Fetch projects from the Worker's public endpoint
+                const res = await fetch(`${API_BASE}/projects`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                
+                const projects = await res.json();
+                
+                if (!projects || !Array.isArray(projects) || projects.length === 0) {
+                    container.innerHTML = '<p class="loading">No projects tracked yet.</p>';
+                    return;
+                }
+                
+                // Render projects
+                container.innerHTML = projects.map(p => {
+                    const statusClass = p.status ? p.status.toLowerCase() : 'unknown';
+                    return `
+                        <div class="project">
+                            <h3>${p.name || 'Untitled Project'}</h3>
+                            <p>${p.description || 'No description available.'}</p>
+                            <div>
+                                <span class="status ${statusClass}">${p.status || 'Unknown'}</span>
+                            </div>
+                            <div class="meta">Last updated: ${safeDateFormat(p.updated_at)}</div>
+                        </div>
+                    `;
+                }).join('');
+                
+            } catch (e) {
+                // Display actionable error message
+                container.innerHTML = `<p class="loading" style="color:var(--red);">Error loading projects: ${e.message}. Please check the API endpoint at ${API_BASE}/projects</p>`;
+            }
+        }
+        
+        // Initial load
+        loadProjects();
+        
+        // Service Worker registration (for PWA features)
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js');
+        }
+    </script>
 </body>
 </html>
