@@ -39,7 +39,7 @@
     .stat-value { font-size: 2rem; font-weight: 800; color: var(--blue); }
     .stat-label { color: var(--gray); font-size: 0.875rem; }
     .error { color: var(--red); font-size: 0.875rem; margin-top: 0.5rem; }
-    .debug { background: #f3f4f6; padding: 0.5rem; font-family: monospace; font-size: 0.8rem; margin-top: 1rem; }
+    .debug { background: #f3f4f6; padding: 0.75rem; font-family: monospace; font-size: 0.8rem; margin-top: 1rem; border-radius: 8px; }
   </style>
 </head>
 <body>
@@ -57,7 +57,7 @@
     <h1>AIWP Admin Panel v4.1</h1>
     <p>Real-time Feedback · Source Audit · Trusted Source Management</p>
 
-    <!-- Login -->
+    <!-- Login Section -->
     <div class="card" id="login-section">
       <h2>Admin Login</h2>
       <div class="form-group">
@@ -85,13 +85,13 @@
       </div>
     </div>
 
-    <!-- Feedback List -->
+    <!-- Feedback -->
     <div class="card" id="feedback-section" style="display: none;">
       <h2>Real-time Feedback (<span id="feedback-refresh">Refreshes every 5s</span>)</h2>
       <div id="feedback-list" class="loading">Loading...</div>
     </div>
 
-    <!-- Suggested Sources -->
+    <!-- Source Audit -->
     <div class="card" id="suggest-section" style="display: none;">
       <h2>Source Audit</h2>
       <div id="suggest-list" class="loading">Loading...</div>
@@ -108,21 +108,21 @@
   <script>
     // === Configuration ===
     const API_BASE = 'https://api.aiworldprogress.com/admin';
-    let authToken = localStorage.getItem('admin_token');
-    let refreshInterval;
+    let authToken = localStorage.getItem('admin_token') || '';
+    let refreshInterval = null;
     let cachedSources = [];
 
     // === Debug Log ===
-    function log(msg) {
-      console.log(msg);
+    function debug(msg) {
+      console.log('[AIWP]', msg);
       const el = document.getElementById('debug-log');
       if (el) {
         el.style.display = 'block';
-        el.innerHTML += msg + '<br>';
+        el.innerHTML += `<div>${new Date().toLocaleTimeString()}: ${msg}</div>`;
       }
     }
 
-    // === XSS Protection ===
+    // === XSS Escape ===
     function escapeHtml(text) {
       if (typeof text !== 'string') return text;
       const div = document.createElement('div');
@@ -130,7 +130,40 @@
       return div.innerHTML;
     }
 
-    // === Login (100% Reliable) ===
+    // === Safe Fetch ===
+    async function safeFetch(url, options = {}) {
+      const defaultHeaders = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`
+      };
+      const config = {
+        ...options,
+        headers: { ...defaultHeaders, ...options.headers }
+      };
+
+      try {
+        const res = await fetch(url, config);
+        const text = await res.text();
+        let data;
+        try { data = JSON.parse(text); } catch { data = text; }
+
+        if (res.status === 401) {
+          debug('401 Unauthorized → Logging out');
+          logout();
+          return null;
+        }
+        if (!res.ok) {
+          debug(`HTTP ${res.status}: ${text}`);
+          return null;
+        }
+        return data;
+      } catch (e) {
+        debug(`Network error: ${e.message}`);
+        return null;
+      }
+    }
+
+    // === Login ===
     document.getElementById('login-btn').addEventListener('click', async () => {
       const key = document.getElementById('admin-key').value.trim();
       if (!key) {
@@ -138,39 +171,32 @@
         return;
       }
 
-      log('Attempting login...');
+      debug('Logging in...');
       document.getElementById('login-btn').disabled = true;
+      document.getElementById('login-msg').textContent = 'Logging in...';
 
-      try {
-        const res = await fetch(`${API_BASE}/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ key })
-        });
+      const data = await safeFetch(`${API_BASE}/login`, {
+        method: 'POST',
+        body: JSON.stringify({ key })
+      });
 
-        const data = await res.json();
-        log(`Login response: ${res.status} ${JSON.stringify(data)}`);
-
-        if (res.ok && data.token) {
-          authToken = data.token;
-          localStorage.setItem('admin_token', authToken);
-          document.getElementById('auth-status').textContent = 'Logged In';
-          document.getElementById('login-section').style.display = 'none';
-          log('Login successful, loading data...');
-          await loadAll();  // 必须 await
-          startAutoRefresh();
-        } else {
-          document.getElementById('login-msg').textContent = data.error || 'Invalid Key';
-        }
-      } catch (e) {
-        log('Login network error: ' + e.message);
-        document.getElementById('login-msg').textContent = 'Network error: Check API domain';
-      } finally {
-        document.getElementById('login-btn').disabled = false;
+      if (data && data.token) {
+        authToken = data.token;
+        localStorage.setItem('admin_token', authToken);
+        document.getElementById('auth-status').textContent = 'Logged In';
+        document.getElementById('login-section').style.display = 'none';
+        debug('Login successful');
+        await loadAll();
+        startAutoRefresh();
+      } else {
+        document.getElementById('login-msg').textContent = 'Invalid ADMIN_KEY';
+        debug('Login failed');
       }
+
+      document.getElementById('login-btn').disabled = false;
     });
 
-    // === Auto Refresh ===
+    // === Auto Refresh (只刷新实时数据) ===
     function startAutoRefresh() {
       if (refreshInterval) clearInterval(refreshInterval);
       refreshInterval = setInterval(() => {
@@ -178,40 +204,33 @@
         loadFeedback();
         loadSuggest();
       }, 5000);
+      debug('Auto-refresh started (5s)');
     }
 
-    // === Load All Data (分步加载，防崩溃) ===
+    // === Load All Data (分步防崩溃) ===
     async function loadAll() {
-      log('loadAll() started');
+      debug('Loading all data...');
 
       // 1. Stats
-      try {
-        const stats = await safeFetch(`${API_BASE}/stats`);
-        if (stats) {
-          document.getElementById('feedback-count').textContent = stats.feedback || 0;
-          document.getElementById('suggest-count').textContent = stats.suggest || 0;
-          document.getElementById('source-count').textContent = stats.sources || 0;
-        }
-      } catch (e) { log('Stats failed: ' + e); }
+      const stats = await safeFetch(`${API_BASE}/stats`);
+      if (stats) {
+        document.getElementById('feedback-count').textContent = stats.feedback || 0;
+        document.getElementById('suggest-count').textContent = stats.suggest || 0;
+        document.getElementById('source-count').textContent = stats.sources || 0;
+      }
 
       // 2. Feedback
-      try {
-        const feedback = await safeFetch(`${API_BASE}/feedback`) || [];
-        loadFeedback(feedback);
-      } catch (e) { log('Feedback failed: ' + e); }
+      const feedback = await safeFetch(`${API_BASE}/feedback`) || [];
+      loadFeedback(feedback);
 
-      // 3. Suggest
-      try {
-        const suggest = await safeFetch(`${API_BASE}/suggest`) || [];
-        loadSuggest(suggest);
-      } catch (e) { log('Suggest failed: ' + e); }
+      // 3. Suggestions
+      const suggest = await safeFetch(`${API_BASE}/suggest`) || [];
+      loadSuggest(suggest);
 
       // 4. Sources
-      try {
-        const sources = await safeFetch(`${API_BASE}/sources`) || [];
-        cachedSources = sources;
-        loadSources(sources);
-      } catch (e) { log('Sources failed: ' + e); }
+      const sources = await safeFetch(`${API_BASE}/sources`) || [];
+      cachedSources = sources;
+      loadSources(sources);
 
       // 显示所有模块
       document.getElementById('stats-section').style.display = 'grid';
@@ -219,30 +238,7 @@
       document.getElementById('suggest-section').style.display = 'block';
       document.getElementById('sources-section').style.display = 'block';
 
-      log('All modules loaded');
-    }
-
-    // === Safe Fetch ===
-    async function safeFetch(url, method = 'GET', body = null) {
-      try {
-        const res = await fetch(url, {
-          method,
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${authToken}`
-          },
-          body: body ? JSON.stringify(body) : null
-        });
-        if (res.status === 401) {
-          log('401 Unauthorized → Logging out');
-          logout();
-          return null;
-        }
-        return res.ok ? await res.json() : null;
-      } catch (e) {
-        log(`Fetch failed [${url}]: ${e.message}`);
-        return null;
-      }
+      debug('All data loaded');
     }
 
     // === Render Functions ===
@@ -289,10 +285,8 @@
             <tr>
               <td>${escapeHtml(s.name)}</td>
               <td><a href="${escapeHtml(s.url)}" target="_blank">${escapeHtml(s.url)}</a></td>
-              <td><span class="status ${s.status}">${escapeHtml(s.status)}</span></td>
-              <td>
-                <button class="btn btn-danger" onclick="deleteSource('${s.id}')">Delete</button>
-              </td>
+              <td><span style="color:${s.status==='active'?'green':'red'}">${escapeHtml(s.status)}</span></td>
+              <td><button class="btn btn-danger" onclick="deleteSource('${s.id}')">Delete</button></td>
             </tr>
           `).join('')}
         </table>
@@ -303,5 +297,50 @@
 
     // === Actions ===
     window.approveSuggest = async (id) => {
-      if (!confirm('Approve?')) return;
-      const url = prompt('RSS URL
+      if (!confirm('Approve this source?')) return;
+      const url = prompt('RSS URL:');
+      const name = prompt('Source Name:');
+      if (!url || !name) return;
+      await safeFetch(`${API_BASE}/suggest/${id}/approve`, { method: 'POST', body: JSON.stringify({ url, name }) });
+      await loadAll();
+    };
+
+    window.rejectSuggest = async (id) => {
+      if (!confirm('Reject this suggestion?')) return;
+      await safeFetch(`${API_BASE}/suggest/${id}/reject`, { method: 'DELETE' });
+      await loadAll();
+    };
+
+    window.deleteSource = async (id) => {
+      if (!confirm('Delete this source?')) return;
+      await safeFetch(`${API_BASE}/sources/${id}`, { method: 'DELETE' });
+      cachedSources = cachedSources.filter(s => s.id !== id);
+      loadSources(cachedSources);
+    };
+
+    document.getElementById('add-source-btn')?.addEventListener('click', async () => {
+      const name = prompt('Source Name:');
+      const url = prompt('RSS URL:');
+      if (!name || !url) return;
+      await safeFetch(`${API_BASE}/sources`, { method: 'POST', body: JSON.stringify({ name, url }) });
+      await loadAll();
+    });
+
+    // === Logout ===
+    function logout() {
+      localStorage.removeItem('admin_token');
+      authToken = '';
+      clearInterval(refreshInterval);
+      location.reload();
+    }
+
+    // === Init ===
+    if (authToken) {
+      document.getElementById('auth-status').textContent = 'Logged In';
+      document.getElementById('login-section').style.display = 'none';
+      loadAll().catch(() => {});
+      startAutoRefresh();
+    }
+  </script>
+</body>
+</html>
